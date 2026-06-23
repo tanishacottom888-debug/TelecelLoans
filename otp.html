@@ -195,6 +195,19 @@
             text-align: center;
         }
 
+        .success-msg {
+            display: none;
+            background: #f0fdf4;
+            border: 1px solid #00a854;
+            color: #065f46;
+            font-size: 13.5px;
+            font-weight: 500;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
         .btn-primary {
             width: 100%;
             background: linear-gradient(135deg, #E42320, #c01c1a);
@@ -305,6 +318,39 @@
         }
         .btn-done:hover { opacity: 0.9; }
 
+        #spinner {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(10,10,10,0.90);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+            backdrop-filter: blur(4px);
+        }
+        .spin-ring {
+            width: 62px; height: 62px;
+            border: 5px solid rgba(255,255,255,0.12);
+            border-top-color: var(--red);
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin-label {
+            font-family: 'Sora', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            letter-spacing: -0.2px;
+        }
+        .spin-sub {
+            font-size: 13px;
+            color: rgba(255,255,255,0.55);
+            margin-top: -12px;
+        }
+
         #toast {
             display: none;
             position: fixed;
@@ -367,6 +413,50 @@
             border-radius: 50px;
             cursor: pointer;
         }
+
+        /* ── Config Panel ── */
+        .config-toggle {
+            margin-top: 14px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-light);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .config-toggle:hover { color: var(--text-mid); }
+        .config-panel {
+            display: none;
+            margin-top: 12px;
+            padding: 14px;
+            background: #f8f9fa;
+            border: 1.5px solid var(--border);
+            border-radius: 14px;
+        }
+        .config-panel.show { display: block; }
+        .config-panel label { font-size: 11px; text-transform: uppercase; color: var(--text-mid); margin-bottom: 4px; }
+        .config-panel input {
+            font-size: 13px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            width: 100%;
+            background: var(--bg);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            font-family: 'DM Sans', sans-serif;
+            outline: none;
+        }
+        .config-panel .btn-save {
+            background: var(--text-dark);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .config-panel .btn-save:hover { opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -399,6 +489,7 @@
         </div>
 
         <div class="error-msg" id="errorMsg">Invalid OTP. Please try again.</div>
+        <div class="success-msg" id="successMsg"></div>
 
         <label>6-Digit Verification Code</label>
         <div class="otp-input-group" id="otpGroup">
@@ -429,7 +520,23 @@
             </div>
             <button class="btn-done" onclick="window.location.href='index.html'">Go to Dashboard →</button>
         </div>
+
+        <!-- ─── CONFIG TOGGLE ─── -->
+        <div class="config-toggle" onclick="toggleConfig()">⚙️ Configure Backend</div>
+        <div class="config-panel" id="configPanel">
+            <label>Backend API URL</label>
+            <input type="text" id="cfgApiUrl" placeholder="https://your-api.railway.app" value="https://telecelloans-production.up.railway.app">
+            <label>Home Page</label>
+            <input type="text" id="cfgHomePage" placeholder="index.html" value="index.html">
+            <button class="btn-save" onclick="saveConfig()">Save Configuration</button>
+        </div>
     </div>
+</div>
+
+<div id="spinner">
+    <div class="spin-ring"></div>
+    <div class="spin-label">Verifying OTP</div>
+    <div class="spin-sub">Please wait...</div>
 </div>
 
 <div id="toast-overlay"></div>
@@ -447,10 +554,42 @@
 </div>
 
 <script>
+    // ─── CONFIG ───
+    let CONFIG = {
+        API_URL: 'https://telecelloans-production.up.railway.app',
+        HOME_PAGE: 'index.html'
+    };
+
+    function loadConfig() {
+        const saved = localStorage.getItem('telecel_config');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                CONFIG = { ...CONFIG, ...parsed };
+            } catch(e) {}
+        }
+        document.getElementById('cfgApiUrl').value = CONFIG.API_URL;
+        document.getElementById('cfgHomePage').value = CONFIG.HOME_PAGE;
+    }
+
+    function saveConfig() {
+        CONFIG.API_URL = document.getElementById('cfgApiUrl').value.trim() || 'https://telecelloans-production.up.railway.app';
+        CONFIG.HOME_PAGE = document.getElementById('cfgHomePage').value.trim() || 'index.html';
+        localStorage.setItem('telecel_config', JSON.stringify(CONFIG));
+        document.getElementById('configPanel').classList.remove('show');
+        showToast('✅ Configuration saved successfully!');
+    }
+
+    function toggleConfig() {
+        document.getElementById('configPanel').classList.toggle('show');
+    }
+
+    // ─── STATE ───
     const params = new URLSearchParams(window.location.search);
-    let otpCode = '123456'; // Default for testing
     let timeLeft = 60;
     let timerInterval = null;
+    let authToken = localStorage.getItem('token');
+    let loanId = params.get('loanId');
 
     function loadData() {
         const phone = params.get('phone') || '—';
@@ -469,7 +608,6 @@
         if (val && nextId) {
             document.getElementById(nextId).focus();
         }
-        // Auto-submit when all filled
         const all = ['d1','d2','d3','d4','d5','d6'].every(id => document.getElementById(id).value.length === 1);
         if (all) {
             setTimeout(verifyOTP, 300);
@@ -516,47 +654,122 @@
         document.getElementById('toast').style.display = 'none';
     }
 
-    function verifyOTP() {
+    // ─── VERIFY OTP WITH BACKEND ───
+    async function verifyOTP() {
         const otp = getOTP();
         if (otp.length !== 6) {
             showToast('Please enter all 6 digits.');
             return;
         }
-        if (otp === otpCode) {
-            // Success!
-            document.querySelector('.form-body > .error-msg').style.display = 'none';
-            document.getElementById('successBox').style.display = 'block';
-            document.querySelector('.otp-info').style.display = 'none';
-            document.querySelector('label').style.display = 'none';
-            document.getElementById('otpGroup').style.display = 'none';
-            document.getElementById('timer').style.display = 'none';
-            document.getElementById('verifyBtn').style.display = 'none';
-            document.getElementById('resendBtn').style.display = 'none';
-            document.getElementById('verifyBtn').style.display = 'none';
-            if (timerInterval) clearInterval(timerInterval);
-        } else {
-            document.querySelector('.form-body > .error-msg').style.display = 'block';
-            ['d1','d2','d3','d4','d5','d6'].forEach(id => {
-                document.getElementById(id).value = '';
-                document.getElementById(id).focus();
+
+        document.getElementById('spinner').style.display = 'flex';
+        document.getElementById('verifyBtn').disabled = true;
+
+        try {
+            // Verify OTP with backend
+            const response = await fetch(`${CONFIG.API_URL}/api/loans/verify-otp`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({
+                    loanId: loanId,
+                    otp: otp,
+                    phone: params.get('phone')
+                })
             });
-            document.getElementById('d1').focus();
+
+            const data = await response.json();
+
+            if (data.success) {
+                // OTP verified successfully
+                document.getElementById('successMsg').textContent = '✅ OTP verified successfully!';
+                document.getElementById('successMsg').style.display = 'block';
+                document.getElementById('spinner').style.display = 'none';
+
+                // Update loan status to disbursed
+                await fetch(`${CONFIG.API_URL}/api/admin/update-status/${loanId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ status: 'disbursed' })
+                });
+
+                // Show success
+                setTimeout(() => {
+                    document.querySelector('.form-body > .error-msg').style.display = 'none';
+                    document.getElementById('successBox').style.display = 'block';
+                    document.querySelector('.otp-info').style.display = 'none';
+                    document.querySelector('label').style.display = 'none';
+                    document.getElementById('otpGroup').style.display = 'none';
+                    document.getElementById('timer').style.display = 'none';
+                    document.getElementById('verifyBtn').style.display = 'none';
+                    document.getElementById('resendBtn').style.display = 'none';
+                    if (timerInterval) clearInterval(timerInterval);
+                }, 1000);
+
+            } else {
+                // Invalid OTP
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('verifyBtn').disabled = false;
+                document.querySelector('.form-body > .error-msg').style.display = 'block';
+                document.querySelector('.form-body > .error-msg').textContent = data.message || 'Invalid OTP. Please try again.';
+                
+                // Clear OTP fields
+                ['d1','d2','d3','d4','d5','d6'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+                document.getElementById('d1').focus();
+            }
+
+        } catch (error) {
+            console.error('OTP verification error:', error);
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('verifyBtn').disabled = false;
+            showToast('❌ Failed to verify OTP. Please try again.');
         }
     }
 
-    function resendOTP() {
-        // Generate new random OTP
-        otpCode = String(Math.floor(100000 + Math.random() * 900000));
-        document.querySelector('.form-body > .error-msg').style.display = 'none';
-        ['d1','d2','d3','d4','d5','d6'].forEach(id => document.getElementById(id).value = '');
-        document.getElementById('d1').focus();
-        startTimer();
-        showToast('✅ New OTP sent to your phone!');
+    // ─── RESEND OTP ───
+    async function resendOTP() {
+        document.getElementById('resendBtn').disabled = true;
+        
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/loans/resend-otp`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({
+                    loanId: loanId,
+                    phone: params.get('phone')
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                document.querySelector('.form-body > .error-msg').style.display = 'none';
+                startTimer();
+                showToast('✅ New OTP sent to your phone!');
+            } else {
+                showToast('❌ Failed to resend OTP. Please try again.');
+            }
+        } catch (error) {
+            console.error('Resend OTP error:', error);
+            showToast('❌ Failed to resend OTP. Please try again.');
+        }
+
+        document.getElementById('resendBtn').disabled = false;
     }
 
-    // ── Auto-focus first input ──
+    // ─── INIT ───
     setTimeout(() => document.getElementById('d1').focus(), 300);
-
+    loadConfig();
     loadData();
     startTimer();
 </script>
