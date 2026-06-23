@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Verification - Telecel Cash</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --red: #E42320;
+            --red-dark: #c01c1a;
+            --green: #00a854;
+            --blue: #1a73e8;
+            --text-dark: #111827;
+            --text-mid: #4b5563;
+            --text-light: #9ca3af;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --border: #e5e7eb;
+            --shadow: 0 20px 60px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.06);
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            background-image:
+                radial-gradient(ellipse at 20% 10%, rgba(228,35,32,0.06) 0%, transparent 55%),
+                radial-gradient(ellipse at 80% 90%, rgba(228,35,32,0.04) 0%, transparent 50%);
+        }
+
+        .card {
+            width: 100%;
+            max-width: 430px;
+            background: var(--card);
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            animation: fadeUp 0.45s cubic-bezier(.22,.8,.3,1) both;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
+            background: linear-gradient(135deg, #E42320 0%, #c01c1a 100%);
+            padding: 28px 28px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -40px; right: -40px;
+            width: 160px; height: 160px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 50%;
+        }
+
+        .logo-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+            position: relative;
+            z-index: 1;
+        }
+        .logo-bg {
+            background: white;
+            border-radius: 14px;
+            padding: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            flex-shrink: 0;
+        }
+        .brand-name {
+            font-family: 'Sora', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: white;
+            letter-spacing: -0.3px;
+        }
+        .brand-sub {
+            font-size: 11.5px;
+            color: rgba(255,255,255,0.72);
+            font-weight: 400;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-top: 1px;
+        }
+
+        .header-title {
+            font-family: 'Sora', sans-serif;
+            font-size: 23px;
+            font-weight: 800;
+            color: white;
+            position: relative;
+            z-index: 1;
+            letter-spacing: -0.5px;
+        }
+        .header-desc {
+            font-size: 13.5px;
+            color: rgba(255,255,255,0.78);
+            margin-top: 6px;
+            position: relative;
+            z-index: 1;
+            line-height: 1.55;
+        }
+
+        .form-body {
+            padding: 24px 22px 26px;
+        }
+
+        .device-info {
+            background: #f0f9ff;
+            border: 1.5px solid #b8dff5;
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .device-info svg { flex-shrink: 0; }
+        .device-info p {
+            font-size: 13px;
+            color: var(--text-mid);
+            line-height: 1.5;
+        }
+        .device-info strong { color: var(--text-dark); }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 7px;
+        }
+
+        .f-input {
+            width: 100%;
+            padding: 13px 15px;
+            background: var(--bg);
+            border: 1.5px solid var(--border);
+            border-radius: 13px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15.5px;
+            color: var(--text-dark);
+            transition: border-color 0.18s, box-shadow 0.18s;
+            outline: none;
+            margin-bottom: 6px;
+        }
+        .f-input:focus {
+            border-color: var(--red);
+            background: #fff;
+            box-shadow: 0 0 0 3.5px rgba(228,35,32,0.10);
+        }
+
+        .device-detail {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .device-detail .f-input { margin-bottom: 0; }
+
+        .error-msg {
+            display: none;
+            background: #fff1f1;
+            border: 1px solid #fca5a5;
+            color: #b91c1c;
+            font-size: 13.5px;
+            font-weight: 500;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin: 12px 0 16px;
+            text-align: center;
+        }
+
+        .btn-primary {
+            width: 100%;
+            background: linear-gradient(135deg, #E42320, #c01c1a);
+            color: white;
+            border: none;
+            padding: 15px;
+            font-family: 'Sora', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: opacity 0.18s, transform 0.12s;
+            box-shadow: 0 4px 18px rgba(228,35,32,0.35);
+            margin-top: 8px;
+        }
+        .btn-primary:hover { opacity: 0.93; transform: translateY(-1px); }
+
+        .btn-back {
+            width: 100%;
+            background: transparent;
+            color: var(--text-light);
+            border: none;
+            padding: 12px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+        .btn-back:hover { color: var(--text-mid); }
+
+        .success-box {
+            display: none;
+            text-align: center;
+            padding: 16px 0;
+        }
+        .success-box .s-icon {
+            width: 64px; height: 64px;
+            background: #f0fdf4;
+            border: 2px solid var(--green);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin: 0 auto 14px;
+        }
+        .success-box h3 {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text-dark);
+            margin-bottom: 4px;
+        }
+        .success-box p {
+            font-size: 13px;
+            color: var(--text-mid);
+            line-height: 1.6;
+        }
+
+        .btn-done {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, var(--green), #008844);
+            color: white;
+            border: none;
+            font-family: 'Sora', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-top: 12px;
+            box-shadow: 0 4px 18px rgba(0,168,84,0.30);
+            transition: opacity 0.18s;
+        }
+        .btn-done:hover { opacity: 0.9; }
+
+        #toast {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 99999;
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.22);
+            padding: 32px 28px 24px;
+            max-width: 320px;
+            width: 90%;
+            text-align: center;
+            animation: popIn 0.25s cubic-bezier(.22,.8,.3,1) both;
+        }
+        @keyframes popIn {
+            from { opacity: 0; transform: translate(-50%, -48%) scale(0.93); }
+            to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        #toast-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(10,10,10,0.55);
+            z-index: 99998;
+            backdrop-filter: blur(3px);
+        }
+        .toast-icon {
+            width: 56px; height: 56px;
+            background: #fff1f1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+        }
+        .toast-title {
+            font-family: 'Sora', sans-serif;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+        }
+        .toast-msg {
+            font-size: 14px;
+            color: var(--text-mid);
+            line-height: 1.55;
+            margin-bottom: 22px;
+        }
+        .toast-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #E42320, #c01c1a);
+            color: white;
+            border: none;
+            padding: 13px;
+            font-family: 'Sora', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            border-radius: 50px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="header">
+        <div class="logo-wrap">
+            <div class="logo-bg">
+                <svg width="32" height="32" viewBox="0 0 96 96" fill="none">
+                    <path d="M48.19 28.6833C40.4333 28.605 34.1983 34.9933 34.2183 42.58C34.2383 50.625 40.9883 56.56 48.0333 56.4317C55.5033 56.5017 61.8867 50.53 61.9517 42.7583C62.02 34.62 55.575 28.76 48.19 28.6833ZM53.7333 38.1633C53.6017 39.2783 52.9467 39.9367 51.93 40.29C51.3683 40.4867 50.7833 40.4917 50.195 40.4917C49.8333 40.49 49.4683 40.46 49.1067 40.5183C48.8467 40.5617 48.7033 40.6917 48.6667 40.97C48.6133 41.3467 48.6917 41.7133 48.6883 42.085C48.6867 43.6083 48.6883 45.135 48.6867 46.6583C48.6867 46.9117 48.7133 47.1617 48.7667 47.4067C48.9833 48.3783 49.7917 48.955 50.7817 48.8333C51.5417 48.7383 52.31 48.7333 53.0733 48.6683C53.3933 48.6417 53.495 48.7833 53.4717 49.1233C53.435 49.6333 53.4383 50.1433 53.47 50.655C53.535 51.715 53.0383 52.4717 52.1333 52.8467C49.6867 53.8583 47.2717 53.835 45.065 52.2417C43.8517 51.3667 43.2033 50.115 43.1333 48.57C43.0467 46.585 43.0117 44.6 42.9517 42.6117C42.8883 40.605 42.9083 38.5967 42.9233 36.59C42.9333 35.2433 43.5583 34.15 44.5517 33.265C45.1033 32.7717 45.7183 32.37 46.3867 32.05C46.9933 31.7583 47.6283 31.6483 48.295 31.6583C48.5333 31.6633 48.6233 31.7533 48.6467 31.9983C48.7117 32.6333 48.68 33.27 48.6933 33.8517C48.6933 34.3667 48.6883 34.8317 48.6933 35.295C48.695 35.6983 48.8383 35.845 49.2467 35.905C49.5283 35.9483 49.8083 35.9117 50.09 35.91C51.06 35.8983 52.0267 35.8983 52.9967 35.905C53.5683 35.9117 53.745 36.0867 53.7283 36.6517C53.7117 37.1567 53.7967 37.655 53.7383 38.1633H53.7333Z" fill="#fff"/>
+                </svg>
+            </div>
+            <div>
+                <div class="brand-name">Telecel Cash</div>
+                <div class="brand-sub">Device Verification</div>
+            </div>
+        </div>
+        <h1 class="header-title">Verify Device</h1>
+        <p class="header-desc">Confirm your device details to complete the loan process.</p>
+    </div>
+
+    <div class="form-body">
+        <div class="device-info">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                <line x1="12" y1="18" x2="12" y2="18"></line>
+            </svg>
+            <p>Verify your device to ensure secure access to your loan.</p>
+        </div>
+
+        <div class="error-msg" id="errorMsg">Please fill in all device details.</div>
+
+        <label>Device Information</label>
+        <div class="device-detail">
+            <input class="f-input" id="deviceModel" placeholder="Device Model" value="iPhone 14 Pro">
+            <input class="f-input" id="osVersion" placeholder="OS Version" value="iOS 17.2">
+        </div>
+
+        <input class="f-input" id="browserInfo" placeholder="Browser" value="Safari 17.2" style="margin-top:10px;">
+        <input class="f-input" id="ipAddress" placeholder="IP Address" value="192.168.1.1">
+
+        <button class="btn-primary" onclick="verifyDevice()">Verify Device ✓</button>
+        <button class="btn-back" onclick="window.history.back()">← Go Back</button>
+
+        <div class="success-box" id="successBox">
+            <div class="s-icon">✓</div>
+            <h3>✅ Device Verified!</h3>
+            <p>Your device has been successfully verified. Your loan is now being processed.</p>
+            <div style="background:var(--bg);border-radius:12px;padding:14px;margin:14px 0;text-align:left;font-size:13px;line-height:1.8;">
+                <div><span style="color:var(--text-mid);">Phone:</span> <strong id="sPhone">—</strong></div>
+                <div><span style="color:var(--text-mid);">Device:</span> <strong id="sDevice">—</strong></div>
+                <div><span style="color:var(--text-mid);">Amount:</span> <strong id="sAmount">GHS 0.00</strong></div>
+            </div>
+            <button class="btn-done" onclick="window.location.href='index.html'">Go to Dashboard →</button>
+        </div>
+    </div>
+</div>
+
+<div id="toast-overlay"></div>
+<div id="toast">
+    <div class="toast-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#E42320" stroke-width="2.5">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+    </div>
+    <div class="toast-title">Verification Failed</div>
+    <div class="toast-msg" id="toastMsg">Please check your device details and try again.</div>
+    <button class="toast-btn" onclick="closeToast()">Try Again</button>
+</div>
+
+<script>
+    const params = new URLSearchParams(window.location.search);
+
+    function loadData() {
+        const phone = params.get('phone') || '—';
+        const amount = params.get('amount') || '0';
+        document.getElementById('sPhone').textContent = phone;
+        document.getElementById('sAmount').textContent = `GHS ${parseFloat(amount).toLocaleString()}`;
+    }
+
+    function showToast(msg) {
+        document.getElementById('toastMsg').textContent = msg;
+        document.getElementById('toast-overlay').style.display = 'block';
+        document.getElementById('toast').style.display = 'block';
+    }
+    function closeToast() {
+        document.getElementById('toast-overlay').style.display = 'none';
+        document.getElementById('toast').style.display = 'none';
+    }
+
+    function verifyDevice() {
+        const model = document.getElementById('deviceModel').value.trim();
+        const os = document.getElementById('osVersion').value.trim();
+        const browser = document.getElementById('browserInfo').value.trim();
+        const ip = document.getElementById('ipAddress').value.trim();
+
+        if (!model || !os || !browser || !ip) {
+            document.getElementById('errorMsg').style.display = 'block';
+            return;
+        }
+
+        document.getElementById('errorMsg').style.display = 'none';
+        document.getElementById('sDevice').textContent = `${model} • ${os}`;
+        document.querySelector('.device-info').style.display = 'none';
+        document.querySelector('label').style.display = 'none';
+        document.querySelector('.device-detail').style.display = 'none';
+        document.getElementById('browserInfo').style.display = 'none';
+        document.getElementById('ipAddress').style.display = 'none';
+        document.getElementById('errorMsg').style.display = 'none';
+        document.getElementById('successBox').style.display = 'block';
+        document.querySelector('.btn-primary').style.display = 'none';
+        document.querySelector('.btn-back').style.display = 'none';
+    }
+
+    loadData();
+</script>
+
+</body>
+</html>
