@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 
+// Create connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
@@ -8,6 +9,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 });
 
+// Test connection
 const testConnection = async () => {
   try {
     const client = await pool.connect();
@@ -20,6 +22,7 @@ const testConnection = async () => {
   }
 };
 
+// Initialize database tables
 const initDB = async () => {
   const client = await pool.connect();
   try {
